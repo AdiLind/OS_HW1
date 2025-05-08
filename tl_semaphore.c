@@ -16,6 +16,8 @@ void semaphore_init(semaphore* sem, int initial_value) {
  * TODO: Implement semaphore_wait using the Ticket Lock mechanism.
  */
 
+
+ 
  void semaphore_wait(semaphore* sem) {
     // TODO: Obtain a ticket and wait until it is your turn; then decrement the semaphore value.
     int my_ticket = atomic_fetch_add(&sem->ticket, 1);
@@ -58,40 +60,7 @@ void semaphore_init(semaphore* sem, int initial_value) {
  }
 
 
- /*
-void semaphore_wait(semaphore* sem) {
-    // TODO: Obtain a ticket and wait until it is your turn; then decrement the semaphore value.
-    while(1)
-    {
-        // wait until we get a positive value before we try to acquire the lock(get a ticket)
-        while(atomic_load(&sem->value) <= 0)
-        {
-            // spin wait
-            sched_yield();
-        }
-        // get a ticket
-        int my_ticket = atomic_fetch_add(&sem->ticket, 1);
-        // wait until i get my turn
-        while(atomic_load(&sem->cur_ticket) != my_ticket)
-        {
-            sched_yield();
-        }
-
-        int curr_ticket_val = atomic_load(&sem->cur_ticket);
-        // we have our turn, decrement the semaphore value if posible
-        if(curr_ticket_val > 0)
-        {
-            atomic_store(&sem->value, curr_ticket_val - 1);
-            atomic_fetch_add(&sem->cur_ticket, 1); // לשחרר את שולי (לשחרר את המנעול)
-            return;
-        }
-        else{
-            atomic_fetch_add(&sem->cur_ticket, 1);
-        }
-        
-    }
-}
-*/
+ 
 
 /*
  * TODO: Implement semaphore_signal using the Ticket Lock mechanism.

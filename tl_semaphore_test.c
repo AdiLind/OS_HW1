@@ -50,6 +50,7 @@ void* increment_counter(void* arg) {
 // Edge case: test with initial value 0
 bool test_initial_zero() {
     printf("\n--- Test: Initial value 0 ---\n");
+    atomic_store(&shared_counter, 0);
     semaphore_init(&sem, 0);
     
     pthread_t thread1, thread2;
