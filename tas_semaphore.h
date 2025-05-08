@@ -8,8 +8,9 @@
  * Write your struct details in this file..
  */
 typedef struct {
-    // write your implementation here
-} semaphore semaphore;
+    atomic_int value;     
+    atomic_flag lock;     
+} semaphore;
 
 /*
  * Initializes the semaphore pointed to by 'sem' with the specified initial value.
