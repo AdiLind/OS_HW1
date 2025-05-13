@@ -1,4 +1,9 @@
-#include "rwlock.h"
+#include "rw_lock.h"
+#include "rw_lock.h"
+#include <stdio.h>      /* for fprintf, stderr */
+#include <stddef.h>     /* for NULL */
+#include <pthread.h>    /* for pthread functions */
+#include <unistd.h> 
 
 #define NUM_READERS 10
 #define READER 0

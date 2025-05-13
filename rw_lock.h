@@ -1,6 +1,5 @@
 #ifndef RW_LOCK_H
 #define RW_LOCK_H
-
 #include <stdatomic.h>
 
 /*
@@ -8,8 +7,11 @@
  * Write your struct details in this file..
  */
 typedef struct {
-    // write your implementation here
-} rwlock rwlock;
+    atomic_int readers_count; // active readers
+    atomic_int is_writing;  // flag to indicate if a writer is active
+    atomic_int waiting_writers; // number of waiting writers
+    atomic_flag lock; // mutex for the critical section
+} rwlock;
 
 /*
  * Initializes the read-write lock.
