@@ -1,42 +1,130 @@
 #include "local_storage.h"
+#include <stdio.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-/*
- * TODO: Define the global TLS array.
- */
+void acquire_lock(void);
+void release_lock(void);
+
+
+//Global Vars
 tls_data_t g_tls[MAX_THREADS];
+atomic_flag g_tls_lock = ATOMIC_FLAG_INIT; 
 
-/*
- * TODO: Implement init_storage to initialize g_tls.
- */
 void init_storage(void) {
-    // TODO: Set all thread_id fields to -1 and data pointers to NULL.
-}
+    
+    acquire_lock();
+    for(int i =0; i < MAX_THREADS; i++) {
+        g_tls[i].thread_id = -1;
+        g_tls[i].data = NULL;
+    }
+    release_lock();
+} 
 
-/*
- * TODO: Implement tls_thread_alloc to allocate a TLS entry for the calling thread.
- */
 void tls_thread_alloc(void) {
-    // TODO: Use your synchronization mechanism to safely allocate an entry.
+    int64_t thread_id = pthread_self();
+    acquire_lock();
+
+    // check if the thread already has an entry
+    for(int i = 0; i < MAX_THREADS; i++) {
+        if(g_tls[i].thread_id == thread_id) {
+            release_lock();
+            return; // already allocated
+        }
+    }
+    // find the empty entry
+    int index_of_empty_slot = -1;
+    for(int i = 0; i < MAX_THREADS; i++) {
+        if(g_tls[i].thread_id == -1) {
+            index_of_empty_slot = i;
+            break;
+        }
+    }
+
+    if(index_of_empty_slot == -1) {
+        printf("thread [%ld] failed to initialize, not enough space\n", thread_id);
+        release_lock();
+        exit(1);
+    }
+
+    // allocate the entry
+    g_tls[index_of_empty_slot].thread_id = thread_id;
+    release_lock();
 }
 
-/*
- * TODO: Implement get_tls_data to retrieve the TLS data for the calling thread.
- */
 void* get_tls_data(void) {
-    // TODO: Search for the calling thread's entry and return its data.
-    return NULL;
+    int64_t thread_id = pthread_self();
+    void* result = NULL;
+
+    acquire_lock();
+
+    // Search for the thread's entry
+    int found_entry = 0;
+
+    for(int i = 0; i < MAX_THREADS; i++) {
+        if(g_tls[i].thread_id == thread_id) {
+            result = g_tls[i].data;
+            found_entry = 1;
+            break;
+        }
+    }
+
+    release_lock();
+
+    if (!found_entry) {
+        printf("thread [%ld] hasn't been initialized in the TLS\n", thread_id);
+        exit(2);
+    }
+    
+    return result;
 }
 
-/*
- * TODO: Implement set_tls_data to update the TLS data for the calling thread.
- */
+
 void set_tls_data(void* data) {
-    // TODO: Search for the calling thread's entry and set its data.
+    int64_t thread_id = pthread_self();
+
+    acquire_lock();
+
+    int isFound = 0;
+    for(int i=0; i < MAX_THREADS; i++) {
+        if (g_tls[i].thread_id == thread_id) {
+            g_tls[i].data = data;
+            isFound = 1;
+            break;
+        }
+    }
+
+    release_lock();
+    if (!isFound) {
+        printf("thread [%ld] hasn't been initialized in the TLS\n", thread_id);
+        exit(2);
+    }
 }
 
-/*
- * TODO: Implement tls_thread_free to free the TLS entry for the calling thread.
- */
 void tls_thread_free(void) {
-    // TODO: Reset the thread_id and data in the corresponding TLS entry.
+    int64_t thread_id = pthread_self();
+
+    acquire_lock();
+
+    for(int i = 0; i < MAX_THREADS; i++) {
+        if(g_tls[i].thread_id == thread_id) {
+            g_tls[i].thread_id = -1;
+            g_tls[i].data = NULL;
+            break;
+        }
+    }
+    release_lock();
+}
+
+//helper functions
+
+void acquire_lock() {
+    while (atomic_flag_test_and_set(&g_tls_lock)) {
+        sched_yield();
+    }
+}
+
+void release_lock() {
+    atomic_flag_clear(&g_tls_lock);
 }

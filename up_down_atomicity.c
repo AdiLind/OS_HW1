@@ -2,6 +2,7 @@
 #include <pthread.h>
 #include <string.h>
 #include "tas_semaphore.h"
+#include <unistd.h>  // for sleep()
 
 #define THREADS 10
 #define TIMES 5000
