@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "tas_semaphore.h": "c"
+        "tas_semaphore.h": "c",
+        "atomic": "cpp",
+        "system_error": "c"
     }
 }
