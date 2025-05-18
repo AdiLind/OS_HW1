@@ -8,10 +8,11 @@
 #include "cond_var.h"
 #include "queue.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define DEBUG_PRINT(fmt, ...) \
     do { if (DEBUG) fprintf(stderr, "[DEBUG] " fmt, ##__VA_ARGS__); } while (0)
 
+#define MAX_NUMBER 1000000
 
 // global vars
 static queue_t shared_consumer_queue; // Shared queue between producers and consumers
@@ -25,44 +26,42 @@ static pthread_t* consumer_threads_IDs;
 static atomic_bool stop_consumers_flag = false; 
 static int num_producers;
 static int num_consumers;
+static atomic_int next_number_to_generate = ATOMIC_VAR_INIT(0);
+static atomic_int num_generated = ATOMIC_VAR_INIT(0);
 
 //////////// static functions  /////////////////
 static void* producer_thread(void* arg)
 {
     long thread_id = (long)arg;
-    int lowest_generated_number = 0;
-    int max_generated_number = 999999;
+    int max_number = MAX_NUMBER; // 999,999
+    int total_numbers = MAX_NUMBER + 1;  
 
-    while(lowest_generated_number < max_generated_number && !atomic_load(&is_all_numbers_produced)) {
-        int num;
-        bool is_this_number_already_exist = false;
-
-        while(!is_this_number_already_exist && lowest_generated_number < max_generated_number) {
-            num = lowest_generated_number + (rand() % (max_generated_number - lowest_generated_number +1));
-            if(!generated_numbers[num]) {
-                generated_numbers[num] = true;
-                is_this_number_already_exist = true;
-
-                while (lowest_generated_number < max_generated_number && generated_numbers[lowest_generated_number]) {
-                lowest_generated_number++;
-                }
-
-                if(lowest_generated_number >= max_generated_number) {
-                    atomic_store(&is_all_numbers_produced, true);
-                    condition_variable_broadcast(&production_complete_signal);
-                    break;
-                }
-            }  
+    while (!atomic_load(&is_all_numbers_produced)) {
+        //the next number to generate
+        int num = atomic_fetch_add(&next_number_to_generate, 1);
+        
+        //we've reached the limit -> mark as done 
+        if (num >= max_number) {
+            atomic_store(&is_all_numbers_produced, true);
+            condition_variable_broadcast(&production_complete_signal);
+            break;
         }
-        // we found a number that is not generated yet then we will print and enqueue it
-        if(is_this_number_already_exist) {
-            char msg[100];
-            snprintf(msg, sizeof(msg), "Producer %ld produced number %d\n", thread_id, num);
-            print_msg(msg);
-            enqueue(&shared_consumer_queue, num);
+        
+        int count = atomic_fetch_add(&num_generated, 1) + 1;
+        if (count >= total_numbers) {
+            atomic_store(&is_all_numbers_produced, true);
+            condition_variable_broadcast(&production_complete_signal);
+            break;
         }
-     
+        
+        // We found a new number, print and enqueue
+        char msg[100];
+        snprintf(msg, sizeof(msg), "Producer %ld produced number %d", thread_id, num);
+        print_msg(msg);
+        enqueue(&shared_consumer_queue, num);
     }
+    
+    DEBUG_PRINT("Producer %ld exiting\n", thread_id);
     return NULL;
 }
 
@@ -73,12 +72,11 @@ static void* consumer_thread (void* arg){
         int num = dequeue(&shared_consumer_queue, &all_producers_done, &stop_consumers_flag);
 
         if(num == -1 || atomic_load(&stop_consumers_flag)) {
-            break; // no more items to consume
+            break; // no more items
         }
 
         bool is_divisible_by_6 = (num % 6 == 0);
 
-        
         // we got a number from the queue then we will print it
         char msg[100];
         snprintf(msg, sizeof(msg), "Consumer %ld checked %d. Is it divisible by 6? %s", 
@@ -87,8 +85,6 @@ static void* consumer_thread (void* arg){
     }
     return NULL;
 }
-
-
 
 
 
@@ -128,6 +124,8 @@ void start_consumers_producers(int consumers, int producers, int seed) {
     atomic_store(&is_all_producers_done, false);
     atomic_store(&is_all_numbers_produced, false);
     atomic_store(&stop_consumers_flag, false);
+    atomic_store(&next_number_to_generate, 0);
+    atomic_store(&num_generated, 0);
 
     //creating the producer threads
     for(int i = 0; i < producers; i++) {
@@ -147,12 +145,17 @@ void stop_consumers() {
     // TODO: Stop the consumer thread with the given id.
     atomic_store(&stop_consumers_flag, true); //signal to stop consumers
     queue_broadcast_not_empty(&shared_consumer_queue); // wake up all consumers
+
     for(int i = 0; i < num_consumers; i++) {
+        DEBUG_PRINT("Joining consumer thread %d...\n", i);
         pthread_join(consumer_threads_IDs[i], NULL); 
+        DEBUG_PRINT("Consumer thread %d joined\n", i);
     }
+
     free(consumer_threads_IDs);
     free(producer_threads_IDs);
     free(generated_numbers);
+    DEBUG_PRINT("All consumers stopped\n");
 }
 
 
