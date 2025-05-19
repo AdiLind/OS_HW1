@@ -26,7 +26,7 @@ static pthread_t* consumer_threads_IDs;
 static atomic_bool stop_consumers_flag = false; 
 static int num_producers;
 static int num_consumers;
-static atomic_int next_number_to_generate = ATOMIC_VAR_INIT(0);
+//static atomic_int next_number_to_generate = ATOMIC_VAR_INIT(0);
 static atomic_int num_generated = ATOMIC_VAR_INIT(0);
 
 //////////// static functions  /////////////////
@@ -34,32 +34,87 @@ static void* producer_thread(void* arg)
 {
     long thread_id = (long)arg;
     int max_number = MAX_NUMBER; // 999,999
-    int total_numbers = MAX_NUMBER + 1;  
+    int total_numbers = MAX_NUMBER + 1; 
+    int consecutive_failures = 0; 
+    int max_failures = 10000; 
 
     while (!atomic_load(&is_all_numbers_produced)) {
-        //the next number to generate
-        int num = atomic_fetch_add(&next_number_to_generate, 1);
-        
-        //we've reached the limit -> mark as done 
-        if (num >= max_number) {
-            atomic_store(&is_all_numbers_produced, true);
-            condition_variable_broadcast(&production_complete_signal);
-            break;
+        int num = rand() % max_number;
+
+        bool is_already_generated = false;
+        while(atomic_flag_test_and_set(&sync_print_lock)) {
+            sched_yield();
         }
-        
-        int count = atomic_fetch_add(&num_generated, 1) + 1;
-        if (count >= total_numbers) {
-            atomic_store(&is_all_numbers_produced, true);
-            condition_variable_broadcast(&production_complete_signal);
-            break;
+
+
+        is_already_generated = generated_numbers[num];
+        if (!is_already_generated) {
+            generated_numbers[num] = true;
+            consecutive_failures =0;
+
+            int count_of_generated_num = atomic_fetch_add(&num_generated, 1) + 1;
+            // prepare for printing and enqueuing
+            atomic_flag_clear(&sync_print_lock);
+            
+            //new number-> print and enqueue
+            char msg[100];
+            snprintf(msg, sizeof(msg), "Producer %ld produced number: %d", thread_id, num);
+            print_msg(msg);
+            
+            // Add to the queue for consumers
+            enqueue(&shared_consumer_queue, num);
+            
+            if (count_of_generated_num >= total_numbers) {
+                atomic_store(&is_all_numbers_produced, true);
+                condition_variable_broadcast(&production_complete_signal);
+                break;
+            }
+        } else {
+            atomic_flag_clear(&sync_print_lock); // already generated
+            consecutive_failures++;
+            
+           /* After too many consecutive failures, switch to linear search 
+            * I know its not exactly what we asked todo but i think its better and more efficient to handle
+            * this problem with the combination of the two methods
+            */
+            if (consecutive_failures > max_failures) {
+                for (int i = 0; i < max_number; i++) {
+                    while(atomic_flag_test_and_set(&sync_print_lock)) {
+                        sched_yield();
+                    }
+                    
+                    if (!generated_numbers[i]) {
+                        
+                        generated_numbers[i] = true;
+                        int count = atomic_fetch_add(&num_generated, 1) + 1;
+                        atomic_flag_clear(&sync_print_lock);
+                        
+                        char msg[100];
+                        snprintf(msg, sizeof(msg), "Producer %ld produced number: %d", thread_id, i);
+                        print_msg(msg);
+                        
+                        enqueue(&shared_consumer_queue, i);
+                        consecutive_failures = 0;
+                        
+                        if (count >= total_numbers) {
+                            atomic_store(&is_all_numbers_produced, true);
+                            condition_variable_broadcast(&production_complete_signal);
+                            return NULL;
+                        }
+                        break;
+                    }
+                    atomic_flag_clear(&sync_print_lock);
+                }
+                
+                if (consecutive_failures > max_failures) {
+                    atomic_store(&is_all_numbers_produced, true);
+                    condition_variable_broadcast(&production_complete_signal);
+                    break;
+                }
+            }
         }
-        
-        // We found a new number, print and enqueue
-        char msg[100];
-        snprintf(msg, sizeof(msg), "Producer %ld produced number %d", thread_id, num);
-        print_msg(msg);
-        enqueue(&shared_consumer_queue, num);
     }
+    
     
     DEBUG_PRINT("Producer %ld exiting\n", thread_id);
     return NULL;
@@ -107,7 +162,7 @@ void start_consumers_producers(int consumers, int producers, int seed) {
     queue_init(&shared_consumer_queue);
     condition_variable_init(&production_complete_signal);
     // intialize the objects
-    generated_numbers = (bool*)malloc(QUEUE_SIZE * sizeof(bool));
+    generated_numbers = (bool*)calloc(MAX_NUMBER, sizeof(bool));
     producer_threads_IDs = (pthread_t*)malloc(num_producers * sizeof(pthread_t));
     consumer_threads_IDs = (pthread_t*)malloc(num_consumers * sizeof(pthread_t));
 
@@ -124,7 +179,6 @@ void start_consumers_producers(int consumers, int producers, int seed) {
     atomic_store(&is_all_producers_done, false);
     atomic_store(&is_all_numbers_produced, false);
     atomic_store(&stop_consumers_flag, false);
-    atomic_store(&next_number_to_generate, 0);
     atomic_store(&num_generated, 0);
 
     //creating the producer threads
