@@ -142,16 +142,7 @@ static void* consumer_thread (void* arg){
 }
 
 
-
-/*
- * TODO: Implement start_consumers_producers.
- * This function should:
- *  - Print the configuration (number of consumers, producers, seed).
- *  - Seed the random number generator using srand().
- *  - Create producer and consumer threads.
- */
 void start_consumers_producers(int consumers, int producers, int seed) {
-    // TODO: Print configuration and start threads.
     printf("Number of consumers: %d\n", consumers);
     printf("Number of producers: %d\n", producers);
     printf("Seed: %d\n", seed);
@@ -192,11 +183,8 @@ void start_consumers_producers(int consumers, int producers, int seed) {
     
 }
 
-/*
- * TODO: Implement stop_consumers to stop all consumers threads.
- */
+
 void stop_consumers() {
-    // TODO: Stop the consumer thread with the given id.
     atomic_store(&stop_consumers_flag, true); //signal to stop consumers
     queue_broadcast_not_empty(&shared_consumer_queue); // wake up all consumers
 
@@ -223,13 +211,8 @@ void print_msg(const char* msg) {
     atomic_flag_clear(&sync_print_lock);
 }
 
-/*
- * TODO: Implement wait_until_producers_produced_all_numbers 
- * The function should wait until all numbers between 0 and 1,000,000 have been produced.
- */
-void wait_until_producers_produced_all_numbers() {
-    // TODO: Wait until production of numbers (0 to 1,000,000) is complete.
 
+void wait_until_producers_produced_all_numbers() {
     DEBUG_PRINT("Waiting for producers to complete...\n");
 
     ticket_lock condition_var_lock;
@@ -262,12 +245,8 @@ void wait_until_producers_produced_all_numbers() {
     DEBUG_PRINT("All producers completed\n");
 }
 
-/*
- * TODO: Implement wait_consumers_queue_empty to wait until queue is empty, 
- * if queue is already empty - return immediately without waiting.
- */
+
 void wait_consumers_queue_empty() {
-    // TODO: Return non-zero if the consumer queue is empty.
     if(is_queue_is_empty(&shared_consumer_queue)) {
         return;
     }
@@ -278,13 +257,8 @@ void wait_consumers_queue_empty() {
     }
 }
 
-/*
- * TODO: Implement a main function that controls the producer-consumer process
- */
+
 int main(int argc, char* argv[]) {
-    // TODO: Parse arguments.
-    // TODO: Start producer-consumer process.
-    // TODO: Wait for threads to finish and clean up resources.
 
     //validate the input
     if(argc != 4) {
